@@ -1,0 +1,16 @@
+FROM python:3.9-slim
+
+# Install system dependencies for scapy and network tools
+RUN apt-get update && apt-get install -y \
+    tcpdump \
+    iproute2 \
+    net-tools \
+    iputils-ping \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy and install python dependencies
+COPY ex4_skeleton/server/requirements.txt /tmp/
+RUN pip install --no-cache-dir -r /tmp/requirements.txt
+
+# Install Scapy for the assignment
+RUN pip install --no-cache-dir scapy

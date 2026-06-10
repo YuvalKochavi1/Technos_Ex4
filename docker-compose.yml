@@ -1,0 +1,42 @@
+version: '3.8'
+
+services:
+  attacker:
+    build: 
+      context: .
+      dockerfile: Dockerfile.attacker
+    container_name: spoof_attacker
+    privileged: true
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    volumes:
+      - ./ex4_skeleton:/app
+    ports:
+      # Expose port 80 to your local machine so you can browse to http://localhost
+      - "80:80"
+    networks:
+      spoof_net:
+        ipv4_address: 10.0.2.16
+    working_dir: /app
+    # Keep container running in the background
+    command: tail -f /dev/null
+
+  victim:
+    # Netshoot is a network troubleshooting image with curl, dig, ping etc.
+    image: nicolaka/netshoot
+    container_name: spoof_victim
+    networks:
+      spoof_net:
+        ipv4_address: 10.0.2.15
+    dns:
+      - 10.0.2.43
+      - 8.8.8.8
+    command: tail -f /dev/null
+
+networks:
+  spoof_net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.0.2.0/24
