@@ -14,7 +14,7 @@ services:
       - ./ex4_skeleton:/app
     ports:
       # Expose port 80 to your local machine so you can browse to http://localhost
-      - "80:80"
+      - "8080:80"
     networks:
       spoof_net:
         ipv4_address: 10.0.2.16

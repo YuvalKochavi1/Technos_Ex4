@@ -4,7 +4,7 @@ import time
 
 import scapy.all as scapy
 from scapy.all import Ether, ARP, DNS, DNSQR, DNSRR, IP, UDP, getmacbyip
-from self import self
+# from self import self
 
 DOOFENSHMIRTZ_IP = "10.0.2.15"  # Enter the computer you attack's IP.
 SECRATERY_IP = "10.0.2.16"  # Enter the attacker's IP.
@@ -135,7 +135,7 @@ class DnsHandler(object):
         """
         spoof_response = DNS(id=pkt[DNS].id, qr=1, aa=1, qd=pkt[DNS].qd, an=DNSRR(rrname=pkt[DNSQR].qname, rdata=to))
         return spoof_response
-
+ 
     def resolve_packet(self, pkt: scapy.packet.Packet) -> str:
         """
         Main handler for DNS requests. Based on the spoof_dict, decides if the packet
@@ -181,6 +181,92 @@ class DnsHandler(object):
         self.process = p
         self.process.start()
 
+class ArpSpoofDetector(object):
+    """
+    Bonus: Detects ARP spoofing attacks by monitoring ARP replies.
+    Maintains a table of known IP->MAC mappings and alerts when a mapping changes,
+    which indicates a potential ARP spoof attack.
+    """
+    def init(self):
+        # Known ARP table: IP -> MAC
+        self.arp_table = {}
+        # Track suspicious MACs for attacker identification
+        self.suspicious_macs = set()
+
+    def get_real_mac(self, ip: str) -> str:
+        """
+        Sends an ARP request to verify the real MAC for a given IP.
+
+        what we do:
+        1. ask every device on the network "who has this ip?"
+        2. wait for reply
+        3. return MAC if there is one
+        """
+        arp_request = ARP(op=1, pdst=ip) # op =1 is request
+        ether = Ether(dst="ff:ff:ff:ff:ff:ff")  # broadcast every MAC address
+        response = scapy.srp(ether / arp_request, timeout=2, verbose=False, iface=IFACE)[0]
+        if response:
+            return response[0][1].hwsrc
+        return None
+
+    def detect_spoof(self, pkt: scapy.packet.Packet) -> None:
+        """
+        Callback for sniffed ARP packets. Checks if the source IP already has
+        a known MAC. If the MAC changed, it flags a spoofing attempt and tries
+        to identify the attacker.
+
+        what we do:
+        1. check if packet is reply (op=2)
+        2. get source IP and MAC
+        3. check if IP is already in our table
+        4. if yes and MAC changed -> flag spoof
+        5. if no -> add to table
+        """
+        if pkt[ARP].op != 2:  # op = 2 is reply (that ip is at this mac)
+            return
+
+        src_ip = pkt[ARP].psrc
+        src_mac = pkt[ARP].hwsrc
+
+        if src_ip in self.arp_table:
+            known_mac = self.arp_table[src_ip]
+            if known_mac != src_mac:
+                print(f"\n ARP SPOOF DETECTED!")
+                print(f"    IP {src_ip} changed MAC from {known_mac} to {src_mac}")
+                print(f"    Potential attacker MAC: {src_mac}")
+                self.suspicious_macs.add(src_mac)
+                # Try to find the attacker's real IP
+                self.find_attacker(src_mac)
+        else:
+            self.arp_table[src_ip] = src_mac
+            print(f"Learned: {src_ip} -> {src_mac}")
+
+    def find_attacker(self, suspicious_mac: str) -> None:
+        """
+        Given a suspicious MAC address, scans the local network to find
+        which IP truly belongs to that MAC.
+
+        what we do:
+        1. ask every device on the network "who has this mac?"
+        2. wait for reply
+        3. return IP if there is one
+        """
+        print(f"Scanning network to find real IP of attacker MAC {suspicious_mac}...")
+        # Send ARP requests to the local subnet
+        arp_request = Ether(dst="ff:ff:ff:ff:ff:ff") / ARP(op=1, pdst="10.0.2.0/24")
+        responses = scapy.srp(arp_request, timeout=3, verbose=False, iface=IFACE)[0]
+        for sent, received in responses:
+            if received.hwsrc == suspicious_mac:
+                print(f"Attacker's real IP is likely: {received.psrc} (MAC: {received.hwsrc})")
+                return
+        print(f"Could not determine attacker's real IP")
+
+    def run(self) -> None:
+        """
+        Main loop: sniffs ARP replies on the network interface.
+        """
+        print("ARP Spoof Detector started. Monitoring ARP traffic...")
+        scapy.sniff(filter="arp", prn=self.detect_spoof, iface=IFACE, store=0)
 
 if __name__ == "__main__":
     plist = []
