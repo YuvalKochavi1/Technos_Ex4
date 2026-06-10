@@ -5,9 +5,9 @@ from scapy.layers.dns import DNS, DNSQR, DNSRR, IP, sr1, UDP
 import scapy.all as scapy
 import time
 
-DOOFENSHMIRTZ_IP = "???"  # Enter the computer you attack's IP.
-SECRATERY_IP = "???"  # Enter the attacker's IP.
-NETWORK_DNS_SERVER_IP = "???"  # Enter the network's DNS server's IP.
+DOOFENSHMIRTZ_IP = "10.0.2.4"  # Enter the computer you attack's IP.ECRATERY_IP = "???"  # Enter the attacker's IP.
+SECRATERY_IP = "10.0.2.15"
+NETWORK_DNS_SERVER_IP = "10.0.2.15"  # Enter the network's DNS server's IP.
 SPOOF_SLEEP_TIME = 2
 
 IFACE = "???"  # Enter the network interface you work on.
